@@ -1,0 +1,141 @@
+---
+title: "assignment_3"
+author: "Jones Kurian"
+date: "19/09/2022"
+output: pdf_document
+---
+
+```{r}
+dat=scan(file="C:/Users/qazwa/Downloads/assignment3_prob1.txt",what=double())
+compute.prob.x.z=function(X,w.curr,p.curr){
+  L=matrix(NA,nrow=length(X),ncol = length(w.curr))
+  for(k in seq_len(ncol(L))){
+    L[,k]=dbinom(X,size=20,p=p.curr[k])*w.curr[k]
+  }
+  return(list(prob.x.z=L))
+}
+
+EM.iter=function(X,w.curr,p.curr){
+  prob.x.z=compute.prob.x.z(X,w.curr,p.curr)$prob.x.z
+  P_ik=prob.x.z/rowSums(prob.x.z)
+  w.new=colSums(P_ik)/sum(P_ik)
+  p.new=colSums(P_ik*X)/colSums(20*P_ik)
+  return(list(w.new=w.new,p.new=p.new))
+}
+
+
+compute.log.lik=function(X,w.curr,p.curr){
+  prob.x.z=compute.prob.x.z(X,w.curr,p.curr)$prob.x.z
+  ill=sum(log(rowSums(prob.x.z)))
+  return(list(ill=ill))
+}
+
+mixture.EM=function(X,w.init,p.init,epsilon=10^-8,max.iter=100){
+  #X is the data, w.init is the initial value for pi, mu.init is the initial value for mu
+  w.curr=w.init
+  p.curr=p.init
+  #store the incomplete log_likelihood values
+  log_liks=c()
+  log_liks=c(log_liks,compute.log.lik(X,w.curr,p.curr)$ill)
+  delta.ll=1;n.iter=1
+  while((delta.ll>epsilon)&(n.iter<=max.iter)){
+    EM.out=EM.iter(X,w.curr,p.curr)
+    w.curr=EM.out$w.new
+    p.curr=EM.out$p.new
+    log_liks=c(log_liks,compute.log.lik(X,w.curr,p.curr)$ill)
+    delta.ll=log_liks[length(log_liks)]-log_liks[length(log_liks)-1]
+    n.iter=n.iter+1
+  }
+  return(list(w.curr=w.curr,p.curr=p.curr,log_liks=log_liks))
+}
+
+```
+###1c
+```{r}
+p=c(0.2,0.5,0.7);w=c(0.3,0.3,0.4)
+guess1=mixture.EM(dat,w,p,10^-5)
+p=c(0.1,0.3,0.7);w=c(0.1,0.2,0.7)
+guess2=mixture.EM(dat,w,p,10^-5)
+par(mfrow=c(1,2))
+plot(guess1$log_liks~seq(1,length(guess1$log_liks)),xlab='x1',ylab='log_link guess1')
+plot(guess2$log_liks~seq(1,length(guess2$log_liks)),,xlab='x2',ylab='log_link guess2')
+```
+\newpage
+
+```{r}
+guess1
+guess2
+```
+\newpage
+for both guesses the plots show a very large increase after the 1st iteration. Thereafter, the log link increases slowly until the increase is either 0 or less than the epsilon value.
+
+Both guesses converged to the same values for our parametres.
+###2c
+```{r}
+compute.prob.x.z2=function(X,w.curr,p.curr){
+  L=matrix(NA,nrow=length(X),ncol = length(w.curr))
+  for(k in seq_len(ncol(L))){
+    L[,k]=dbinom(X,size=20,p=p.curr[k])*w.curr[k]
+  }
+  L[(nrow(L)-99):nrow(L),1]=dbinom(X[(nrow(L)-99):nrow(L)],size=20,p=p.curr[1])#reflects the fact we are certain of z after 300
+  L[301:400,2:ncol(L)]=0
+  return(list(prob.x.z=L))
+}
+
+EM.iter2=function(X,w.curr,p.curr){
+  prob.x.z=compute.prob.x.z2(X,w.curr,p.curr)$prob.x.z
+  P_ik=prob.x.z/rowSums(prob.x.z)
+  w.new=colSums(P_ik[1:300,1:ncol(P_ik)])/sum(P_ik[1:300,1:ncol(P_ik)])
+  #datapoints collected after 300 shouldn't influence pi
+  p.new=colSums(P_ik*X)/colSums(20*P_ik)
+  return(list(w.new=w.new,p.new=p.new))
+}
+
+compute.log.lik2=function(X,w.curr,p.curr){
+  prob.x.z=compute.prob.x.z2(X,w.curr,p.curr)$prob.x.z
+  ill=sum(log(rowSums(prob.x.z)))
+  return(list(ill=ill))
+}
+
+mixture.EM2=function(X,w.init,p.init,epsilon=10^-8,max.iter=100){
+  #X is the data, w.init is the initial value for pi, mu.init is the initial value for mu
+  w.curr=w.init
+  p.curr=p.init
+  #store the incomplete log_likelihood values
+  log_liks=c()
+  log_liks=c(log_liks,compute.log.lik2(X,w.curr,p.curr)$ill)
+  delta.ll=1;n.iter=1
+  while((delta.ll>epsilon)&(n.iter<=max.iter)){
+    EM.out=EM.iter2(X,w.curr,p.curr)
+    w.curr=EM.out$w.new
+    p.curr=EM.out$p.new
+    log_liks=c(log_liks,compute.log.lik2(X,w.curr,p.curr)$ill)
+    delta.ll=log_liks[length(log_liks)]-log_liks[length(log_liks)-1]
+    n.iter=n.iter+1
+  }
+  return(list(w.curr=w.curr,p.curr=p.curr,log_liks=log_liks))
+}
+```
+
+```{r}
+dat.more=scan(file="C:/Users/qazwa/Downloads/assignment3_prob2.txt")
+dat2=c(dat,dat.more)
+w=c(0.3,0.3,0.4);p=c(0.2,0.5,0.7)
+moreguess1=mixture.EM2(dat2,w,p,10^-5)
+w=c(0.1,0.2,0.7);p=c(0.1,0.3,0.7)
+moreguess2=mixture.EM2(dat2,w,p,10^-5)
+par(mfrow=c(1,2))
+plot(moreguess1$log_liks~seq(1,length(moreguess1$log_liks)),xlab='x1',ylab='log_lik moreguess1')
+plot(moreguess2$log_liks~seq(1,length(moreguess2$log_liks)),,xlab='x2',ylab='log_lik moreguess2')
+moreguess1
+moreguess2
+```
+both guesses again returned the same estimates for the parameters. The plot again 
+shows that the log_liks increase with each iteration. With the previous question 
+and moreguess2 the rate of increase decreased with each iteration but for
+moreguess1 there was an inflection point so the rate of change initially increased
+before decreasing. 
+
+The distribution for pi has changed slightly I think this is because the changes 
+in the calculated value has meant a change in the perceived frequency between trials 
+1 and 300.
