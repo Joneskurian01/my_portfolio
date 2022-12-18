@@ -1,0 +1,115 @@
+---
+title: "Untitled"
+author: "Jones Kurian"
+date: "09/09/2022"
+output: pdf_document
+---
+
+```{r}
+dat=read.table('assignment2_prob1.txt',header = T)
+head(dat)
+dat$duration <- factor(dat$duration, levels=c("0-4","5-9","10-14","15-19","20-24","25-29"))
+dat$residence <- factor(dat$residence, levels=c("Suva", "urban", "rural"))
+dat$education <- factor(dat$education, levels=c("none", "lower", "upper", "sec+"))
+```
+"because the number of children that can be birthed by a number of women does not have strict
+limits, a binomial distribution does not work. I will try a poisson instead."
+
+```{r}
+with(data = dat,interaction.plot(duration,education,log(nChildren)))
+with(data = dat,interaction.plot(duration,residence,log(nChildren)))
+with(data = dat,interaction.plot(education,residence,log(nChildren)))
+```
+'clear evidence of interaction. I took the log of children because that is the link fnuction I am using'
+'the other 2 pairs do not show signs of interaction'
+
+```{r}
+pmod=glm(nChildren~nMother+duration*education+residence,family=poisson,data=dat)
+summary(pmod)
+#The model still lacks adequacy, will check the pearson chi stat'
+sum(residuals(pmod,'pearson')^2)/43
+```
+'the dataset is wildly overdispersed. Instead of transforming this model, I will choose a gamma dist,
+because that has more paramatres and is similar enough to a poisson dist. The gamma distribution
+is also advantageuos because unlike the poisson it can take continuous values instead of only discrete, so
+i will make a model with fertility as the dependant variable.'
+```{r}
+dat$fertility=dat$nChildren/dat$nMother
+gmod=glm(fertility~duration+residence+education,family = Gamma,data = dat)
+summary(gmod)
+step(gmod)
+```
+
+```{r}
+with(data = dat,interaction.plot(duration,residence,predict(gmod)))
+with(data = dat,interaction.plot(education,residence,predict(gmod)))
+with(data = dat,interaction.plot(education,duration,predict(gmod)))
+```
+'no signs of interaction'
+'I am now checking the distribution of the residuals to see if the model is good and how the 
+residuals behave'
+```{r}
+plot(gmod)
+```
+'broadly speaking the errors seem well behaved the pearsons residuals look normally distributed.
+Points 17 and 56 may be outliers'
+```{r}
+plot(dat$fertility~predict(gmod,dat,'response'))
+abline(a=0,b=1,col='red')
+```
+'the plot of predicted vs fitted should match the line y=x. This does seem to be 
+the case. The data seems to be clustered around the fit. The model seems pretty 
+good. I will remove the suspected outliers (17&56) and see what happens'
+```{r}
+gmod2=glm(fertility~duration+residence+education,family = Gamma,data = dat[c(-17,-56),])
+summary(gmod2)
+plot(gmod2)
+```
+'i think the plots for gmod2 are a little worse. Looking at the q-q plot the 
+residuals appear less normal but the residuals do appear more heteroskedastic. 
+I will only remove 56 and see what happens'
+```{r}
+gmod3=glm(fertility~duration+residence+education,family = Gamma,data = dat[c(-56),])
+plot(gmod3)
+1-sum((dat$fertility-predict(gmod2,dat,'response'))^2)/sum((dat$fertility-mean(dat$fertility))^2)
+1-sum((dat$fertility-predict(gmod3,dat,'response'))^2)/sum((dat$fertility-mean(dat$fertility))^2)
+1-sum((dat$fertility-predict(gmod,dat,'response'))^2)/sum((dat$fertility-mean(dat$fertility))^2)
+```
+'gmod3 does appear to be an improvement from gmod2 and gmod1. I will select gmod3. The numbers above are similar to an R^2 statistic'
+```{r}
+plot(dat$fertility~predict(gmod3,dat,'response'),pch=16,col=dat$residence)
+plot(dat$fertility~predict(gmod3,dat,'response'),pch=16,col=dat$education)
+plot(dat$education,1/dat$fertility)
+#from both the plots it would seem the outliers are in education and residence This is surprising 
+#because the interaction plot seemed parrallel.
+gmod4=glm(fertility~education*residence+duration,family=Gamma,data = dat)
+summary(gmod4)
+```
+'basically only sec+ and urban interact all the others are non-significant. This explains 
+why I failed to notice the interaction the first time around because except for that pair all the others
+are parrallel.'
+
+```{r}
+fstat=(deviance(gmod3)-deviance(gmod4))/6/sum(residuals(gmod4,'pearson')^2/53)
+pf(fstat,6,53,lower.tail = F)#calculated p value for whether gmod4 is better than gmod3
+step(gmod4)
+plot(dat$fertility~predict(gmod4,dat,'response'))
+abline(a=0,b=1)
+plot(dat$fertility~predict(gmod3,dat,'response'))
+abline(a=0,b=1)
+```
+'this is not good, the gmod3 excludes 1 of the outlier points in its calculation of deviance 
+but gmod4 includes all points given how close the p value is to 0.05 it is possible that 
+this single point will make the difference. Given how close it is and the result of the step
+function which says all the variables in gmod4 are worth keeping, I leaning towards gmod4 as the 
+best model.'
+
+```{r}
+summary(lm(dat$fertility~predict(gmod4,dat,'response')-1))
+summary(lm(dat$fertility~predict(gmod3,dat,'response')-1))
+plot(gmod4)
+1-sum((dat$fertility-predict(gmod3,dat,'response'))^2)/sum((dat$fertility-mean(dat$fertility))^2)
+1-sum((dat$fertility-predict(gmod4,dat,'response'))^2)/sum((dat$fertility-mean(dat$fertility))^2)
+```
+'gmod4 seems much better. I think gmod4 is the best model for representing the relationship between the 
+various factors and fertility.'
